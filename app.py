@@ -3,15 +3,17 @@ from flask_socketio import SocketIO, emit
 import requests
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+# async_mode="eventlet" -> Render uchun eng mos
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 client_socket = None
 
-@socketio.on("connect_client")
+@socketio.on("connect")
 def register_client():
     global client_socket
     client_socket = request.sid
     print("Client connected:", client_socket)
+    emit("connected", {"msg": "Client registered successfully"})
 
 @app.route("/", methods=["GET", "POST"])
 def proxy():
@@ -25,10 +27,15 @@ def proxy():
         "headers": dict(request.headers),
         "body": request.get_data(as_text=True)
     }
+
+    # So‘rovni client’ga yuboramiz
     socketio.emit("http_request", data, room=client_socket)
 
-    # TODO: klientdan javob kutib qaytarish
+    # TODO: klientdan javobni kutish (async queue qo‘shish mumkin)
     return "Forwarded"
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=8080)
+    # Render portni ENV o‘zgaruvchidan oladi
+    import os
+    port = int(os.environ.get("PORT", 8080))
+    socketio.run(app, host="0.0.0.0", port=port)
