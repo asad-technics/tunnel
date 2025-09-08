@@ -1,6 +1,8 @@
-from flask import Flask, request, jsonify
-from flask_socketio import SocketIO, emit
 import eventlet
+eventlet.monkey_patch()   # 🔹 birinchi chaqiriladi
+
+from flask import Flask, request
+from flask_socketio import SocketIO
 import uuid
 
 app = Flask(__name__)
@@ -38,8 +40,8 @@ def proxy():
     pending_responses[req_id] = None
     socketio.emit("http_request", data, room=client_socket)
 
-    # Javobni kutamiz (timeout bilan)
-    for _ in range(50):  # taxminan 5s
+    # Javobni kutamiz
+    for _ in range(50):  # ~5s
         socketio.sleep(0.1)
         if pending_responses[req_id] is not None:
             resp = pending_responses.pop(req_id)
@@ -48,5 +50,4 @@ def proxy():
     return "Timeout", 504
 
 if __name__ == "__main__":
-    eventlet.monkey_patch()
     socketio.run(app, host="0.0.0.0", port=8080)
