@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maktab Test Tizimi</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+        }
+        fieldset {
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        legend {
+            font-weight: bold;
+        }
+        label {
+            display: block;
+            margin: 5px 0;
+            cursor: pointer;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button[type="reset"] {
+            background-color: #6c757d;
+        }
+        button[type="reset"]:hover {
+            background-color: #5a6268;
+        }
+        .error-message {
+            color: red;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        .no-questions {
+            color: #666;
+            font-style: italic;
+        }
+        #preview-section {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            display: none;
+        }
+        #preview-section h3 {
+            margin-top: 0;
+        }
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            button {
+                width: 100%;
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Maktab Test Tizimi</h1>
+
+    <div class="controls">
+        <button id="open-pdf" aria-label="Test PDFni ochish">PDFni ochish</button>
+    </div>
+
+    <h2>Test topshirish</h2>
+
+    <form id="test-form" aria-labelledby="test-form-title">
+        <label for="student_name">To'liq ism (Familiya Ism):</label>
+        <input
+            type="text"
+            id="student_name"
+            name="student_name"
+            required
+            aria-required="true"
+            pattern="^\S+\s+\S+$"
+            title="Iltimos, to'liq ismingizni kiriting (masalan, Muhammadiyev Jahongir)"
+            placeholder="masalan, Muhammadiyev Jahongir"
+        >
+        <div id="name-error" class="error-message" role="alert"></div>
+        <br>
+
+        <div id="test-questions" role="region" aria-live="polite"></div>
+
+        <button type="submit">Ko‘rib chiqish</button>
+        <button type="reset">Tozalash</button>
+    </form>
+
+    <div id="preview-section">
+        <h3>Kiritilgan ma'lumotlar:</h3>
+        <p><strong>Ism:</strong> <span id="preview-name"></span></p>
+        <p><strong>Javoblar:</strong> <span id="preview-answers"></span></p>
+        <button id="confirm-submit">Tasdiqlash</button>
+        <button id="cancel-submit">Bekor qilish</button>
+    </div>
+
+    <script>
+        const questionsCount = {{ questions_count if questions_count is defined else (questions|length if questions is defined else 0) }};
+        const pdfLink = "{{ pdf_link if pdf_link is defined else '' }}";
+        const container = document.getElementById('test-questions');
+        const form = document.getElementById('test-form');
+        const nameInput = document.getElementById('student_name');
+        const nameError = document.getElementById('name-error');
+        const previewSection = document.getElementById('preview-section');
+        const previewName = document.getElementById('preview-name');
+        const previewAnswers = document.getElementById('preview-answers');
+        const confirmButton = document.getElementById('confirm-submit');
+        const cancelButton = document.getElementById('cancel-submit');
+
+        // Savollar mavjud bo'lmasa xabar chiqarish
+        if (questionsCount === 0) {
+            const noQuestions = document.createElement('p');
+            noQuestions.className = 'no-questions';
+            noQuestions.textContent = 'Savollar mavjud emas. Iltimos, administrator bilan bog‘laning.';
+            container.appendChild(noQuestions);
+        } else {
+            // Savollarni dinamik ravishda yaratish: A, B, C, D variantlari
+            for (let i = 1; i <= questionsCount; i++) {
+                const fs = document.createElement('fieldset');
+                fs.setAttribute('aria-labelledby', `question-${i}`);
+                const legend = document.createElement('legend');
+                legend.id = `question-${i}`;
+                legend.textContent = `Savol ${i}`;
+                fs.appendChild(legend);
+
+                ['A', 'B', 'C', 'D'].forEach(opt => {
+                    const label = document.createElement('label');
+                    label.style.display = 'block';
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = `q-${i}`;
+                    input.value = opt;
+                    input.required = true;
+                    input.setAttribute('aria-label', `Savol ${i} uchun ${opt} varianti`);
+                    label.appendChild(input);
+                    label.appendChild(document.createTextNode(` ${opt}`));
+                    fs.appendChild(label);
+                });
+
+                container.appendChild(fs);
+            }
+        }
+
+        // PDFni yangi oynada ochish
+        document.getElementById('open-pdf').addEventListener('click', () => {
+            if (!pdfLink) {
+                alert('PDF havolasi server tomonidan taqdim etilmagan.');
+                return;
+            }
+            window.open(pdfLink, '_blank');
+        });
+
+        // Ism kiritilganda tekshirish
+        nameInput.addEventListener('input', () => {
+            const name = nameInput.value.trim();
+            if (!name.match(/^\S+\s+\S+$/)) {
+                nameError.textContent = 'Iltimos, to‘liq ismingizni kiriting (masalan, Muhammadiyev Jahongir).';
+            } else {
+                nameError.textContent = '';
+            }
+        });
+
+        // Forma yuborilganda (ko'rib chiqish)
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = nameInput.value.trim();
+
+            if (!name.match(/^\S+\s+\S+$/)) {
+                nameError.textContent = 'Iltimos, to‘liq ismingizni kiriting (masalan, Muhammadiyev Jahongir).';
+                return;
+            }
+
+            if (questionsCount === 0) {
+                alert('Yuborish uchun savollar mavjud emas.');
+                return;
+            }
+
+            const answers = [];
+            for (let i = 1; i <= questionsCount; i++) {
+                const radios = document.getElementsByName(`q-${i}`);
+                let chosen = null;
+                for (const radio of radios) {
+                    if (radio.checked) {
+                        chosen = radio.value;
+                        break;
+                    }
+                }
+                if (!chosen) {
+                    alert(`Iltimos, ${i}-savolga javob bering.`);
+                    return;
+                }
+                answers.push(chosen);
+            }
+
+            try {
+                const response = await fetch('/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ student_name: name, answers })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    alert(`Server xatosi: ${errorText}`);
+                    return;
+                }
+
+                const data = await response.json();
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                // Ma'lumotlarni ko'rsatish
+                previewName.textContent = data.data.Ism;
+                previewAnswers.textContent = data.data.Javoblar.join(', ');
+                previewSection.style.display = 'block';
+                form.style.display = 'none';
+            } catch (err) {
+                alert(`So‘rov amalga oshmadi: ${err.message}`);
+            }
+        });
+
+        // Tasdiqlash tugmasi
+        confirmButton.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/submit_test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}) // Bo'sh ob'ekt, chunki ma'lumotlar session'da
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    alert(`Server xatosi: ${errorText}`);
+                    return;
+                }
+
+                const data = await response.json();
+                alert(data.message);
+                previewSection.style.display = 'none';
+                form.style.display = 'block';
+                form.reset();
+                nameError.textContent = '';
+            } catch (err) {
+                alert(`So‘rov amalga oshmadi: ${err.message}`);
+            }
+        });
+
+        // Bekor qilish tugmasi
+        cancelButton.addEventListener('click', () => {
+            previewSection.style.display = 'none';
+            form.style.display = 'block';
+            form.reset();
+            nameError.textContent = '';
+        });
+
+        // Forma tozalanganda
+        form.addEventListener('reset', () => {
+            nameError.textContent = '';
+            previewSection.style.display = 'none';
+            form.style.display = 'block';
+        });
+    </script>
+</body>
+</html>
