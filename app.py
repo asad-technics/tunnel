@@ -55,9 +55,9 @@ def upload():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
-        # Test javoblarini session'da saqlash
+        # Test javoblarini va PDF yo‘lini session'da saqlash
         session['test_answers'] = list(test_answers) if test_answers else []
-        session['pdf_path'] = filepath
+        session['pdf_path'] = url_for('show_pdf', filename=filename)
         flash('Fayl muvaffaqiyatli yuklandi.')
         return redirect(url_for('upload'))
 
@@ -108,33 +108,66 @@ def submit_test():
     user_answers = submission['user_answers']
     test_answers = session.get('test_answers', [])
 
-    # To'g'ri javoblar sonini hisoblash
-    correct_count = sum(1 for i in range(len(test_answers)) if user_answers[i] == test_answers[i])
+    # To'g'ri va xato javoblar sonini hisoblash
+    correct_count = 0
+    incorrect_questions = []
+    incorrect_answers = []
+    
+    for i in range(len(test_answers)):
+        if user_answers[i] == test_answers[i]:
+            correct_count += 1
+        else:
+            incorrect_questions.append(str(i + 1))  # Savol raqami (1-dan boshlanadi)
+            incorrect_answers.append(user_answers[i])  # Noto‘g‘ri javob
+    
     score = (correct_count / len(test_answers)) * 100 if test_answers else 0
 
     # Natijalarni saqlash
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     result_data = {
-        'Timestamp': [timestamp],
-        'Student Name': [student_name],
-        'Correct Answers': [correct_count],
-        'Total Questions': [len(test_answers)],
-        'Score (%)': [score]
+        'Vaqt': [timestamp],
+        'Ism': [student_name],
+        'To‘g‘ri javoblar': [correct_count],
+        'Umumiy savollar': [len(test_answers)],
+        'Natija (%)': [score],
+        'Javoblar': [', '.join(user_answers)],
+        'Kalit javoblar': [', '.join(test_answers)],
+        'Xato savollar': [', '.join(incorrect_questions) if incorrect_questions else 'Yo‘q'],
+        'Noto‘g‘ri javoblar': [', '.join(incorrect_answers) if incorrect_answers else 'Yo‘q']
     }
     df = pd.DataFrame(result_data)
     
     # XLSX fayliga saqlash
-    if not os.path.exists(RESULTS_FILE):
-        df.to_excel(RESULTS_FILE, index=False, engine='openpyxl')
-    else:
-        # Mavjud faylni o'qish va yangi ma'lumotlar qo'shish
-        existing_df = pd.read_excel(RESULTS_FILE, engine='openpyxl')
-        updated_df = pd.concat([existing_df, df], ignore_index=True)
-        updated_df.to_excel(RESULTS_FILE, index=False, engine='openpyxl')
+    try:
+        if not os.path.exists(RESULTS_FILE):
+            df.to_excel(RESULTS_FILE, index=False, engine='openpyxl')
+        else:
+            existing_df = pd.read_excel(RESULTS_FILE, engine='openpyxl')
+            updated_df = pd.concat([existing_df, df], ignore_index=True)
+            updated_df.to_excel(RESULTS_FILE, index=False, engine='openpyxl')
+    except PermissionError:
+        return {'error': 'Natijalar fayliga yozishda ruxsat xatosi. Iltimos, ~/Documents papkasiga yozish huquqini tekshiring.'}, 500
 
     # Session'dan tozalash
     session.pop('pending_submission', None)
     return {'message': f'Siz {score:.2f}% natija qayd etdingiz ({correct_count} ta to‘g‘ri javob {len(test_answers)} tadan).'}
+
+@app.route('/results')
+def results():
+    if not session.get('logged_in'):
+        flash('Iltimos, avval tizimga kiring.')
+        return redirect(url_for('login'))
+
+    try:
+        df = pd.read_excel(RESULTS_FILE, engine='openpyxl')
+        results_data = df.to_dict('records')
+    except FileNotFoundError:
+        results_data = []
+        flash('Natijalar fayli topilmadi.')
+    except PermissionError:
+        flash('Natijalar fayliga kirishda ruxsat xatosi.')
+        results_data = []
+    return render_template('results.html', results=results_data)
 
 @app.route('/uploads/<filename>')
 def show_pdf(filename):
@@ -145,4 +178,4 @@ def show_pdf(filename):
         return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5000)
