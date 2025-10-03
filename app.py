@@ -1,13 +1,13 @@
 from flask import Flask, request, jsonify
 import numpy as np
-import tflite_runtime.interpreter as tflite
+import tensorflow as tf
 from PIL import Image
 import io
 
 app = Flask(__name__)
 
-# TFLite modelni yuklash
-interpreter = tflite.Interpreter(model_path="model.tflite")
+# TensorFlow Lite modelni yuklash
+interpreter = tf.lite.Interpreter(model_path="model.tflite")
 interpreter.allocate_tensors()
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
@@ -21,6 +21,7 @@ def predict():
     img = Image.open(io.BytesIO(file)).resize(
         (input_details[0]['shape'][2], input_details[0]['shape'][1])
     )
+    # Normalizatsiya (0-1 oraliqqa)
     input_data = np.expand_dims(np.array(img, dtype=np.float32) / 255.0, axis=0)
 
     interpreter.set_tensor(input_details[0]['index'], input_data)
@@ -30,4 +31,5 @@ def predict():
     return jsonify({"prediction": output_data.tolist()})
 
 if __name__ == "__main__":
+    # Flask serverni ishga tushirish
     app.run(host="0.0.0.0", port=5000)
