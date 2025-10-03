@@ -1,100 +1,33 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
+import numpy as np
+import tflite_runtime.interpreter as tflite
+from PIL import Image
+import io
 
 app = Flask(__name__)
 
-# Switch holati
-switch_state = 0
+# TFLite modelni yuklash
+interpreter = tflite.Interpreter(model_path="model.tflite")
+interpreter.allocate_tensors()
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
-@app.route("/", methods=["GET"])
-def index():
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Global Switch</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                background: #eef2f3;
-            }}
-            .container {{
-                text-align: center;
-            }}
-            .switch {{
-                width: 100px;
-                height: 50px;
-                background: #bbb;
-                border-radius: 25px;
-                position: relative;
-                cursor: pointer;
-                transition: background 0.3s;
-                margin: 20px auto;
-            }}
-            .switch.active {{
-                background: #4CAF50;
-            }}
-            .circle {{
-                width: 46px;
-                height: 46px;
-                background: white;
-                border-radius: 50%;
-                position: absolute;
-                top: 2px;
-                left: 2px;
-                transition: left 0.3s;
-            }}
-            .switch.active .circle {{
-                left: 52px;
-            }}
-            .state {{
-                font-size: 22px;
-                font-weight: bold;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>ESP32 Global Switch</h1>
-            <div class="switch { 'active' if switch_state else ''}" id="switch">
-                <div class="circle"></div>
-            </div>
-            <div class="state" id="state">{switch_state}</div>
-        </div>
+@app.route("/predict", methods=["POST"])
+def predict():
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
 
-        <script>
-            const switchEl = document.getElementById("switch");
-            const stateEl = document.getElementById("state");
+    file = request.files["file"].read()
+    img = Image.open(io.BytesIO(file)).resize(
+        (input_details[0]['shape'][2], input_details[0]['shape'][1])
+    )
+    input_data = np.expand_dims(np.array(img, dtype=np.float32) / 255.0, axis=0)
 
-            switchEl.addEventListener("click", () => {{
-                fetch("/toggle", {{method: "POST"}})
-                .then(r => r.text())
-                .then(data => {{
-                    stateEl.innerText = data;
-                    if (data == "1") {{
-                        switchEl.classList.add("active");
-                    }} else {{
-                        switchEl.classList.remove("active");
-                    }}
-                }});
-            }});
-        </script>
-    </body>
-    </html>
-    """
+    interpreter.set_tensor(input_details[0]['index'], input_data)
+    interpreter.invoke()
+    output_data = interpreter.get_tensor(output_details[0]['index'])
 
-@app.route("/toggle", methods=["POST"])
-def toggle():
-    global switch_state
-    switch_state = 1 - switch_state
-    return str(switch_state)
-
-@app.route("/state", methods=["GET"])
-def state():
-    return str(switch_state)
+    return jsonify({"prediction": output_data.tolist()})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
