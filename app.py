@@ -7,7 +7,7 @@ import io
 app = Flask(__name__)
 
 # TensorFlow Lite modelni yuklash
-interpreter = tf.lite.Interpreter(model_path="model.tflite")
+interpreter = tf.lite.Interpreter(model_path="yolov8n_float32.tflite")
 interpreter.allocate_tensors()
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
